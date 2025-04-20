@@ -4,6 +4,8 @@ A Python/Tkinter application to create flexible, multi‑Y‑axis plots from Exc
 
 ---
 
+<img width="1470" alt="image" src="https://github.com/user-attachments/assets/4c8fc00b-980b-4b74-9d3b-0651df6d9f10" />
+
 ## Features
 
 - **Load Data**  
@@ -86,6 +88,4 @@ A Python/Tkinter application to create flexible, multi‑Y‑axis plots from Exc
 
 ---
 
-## License
 
-This project is released under the MIT License.  
