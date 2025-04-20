@@ -1,4 +1,4 @@
-# Data Anaytcs
+# Python-tkinter-GUI-Data Analytics
 
 A Python/Tkinter application to create flexible, multi‑Y‑axis plots from Excel or CSV data files.
 
