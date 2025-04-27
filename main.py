@@ -5,13 +5,14 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import os
 import seaborn as sns
-
+import math
 
 # — Global state —
 sources = {}      # file path → { type:'excel'|'csv', xls:ExcelFile, sheets:[…] }
 y_axes = []       # list of Y‑axis configurations
 fig = None
 canvas_plot = None
+saved_plots = [] # ← holds dicts of {'x':…, 'ys':…,'x_label':…,'title':…}
 
 # — Helper functions —
 def load_files():
@@ -506,7 +507,52 @@ def remove_y_axis(idx):
     canvas_plot = FigureCanvasTkAgg(fig, master=plot_area)
     canvas_plot.draw()
     canvas_plot.get_tk_widget().pack(fill='both', expand=True)
-    
+
+def save_current_plot_config():
+    # ── Load X series ──
+    try:
+        df_x      = get_df(file_x_cb.get(), sheet_x_cb.get())
+        x_series  = df_x[col_x_cb.get()]
+    except Exception as e:
+        return messagebox.showerror("X error", str(e))
+
+    # ── Load all Y series & labels ──
+    ys_list, labels = [], []
+    for cfg in y_axes:
+        try:
+            ys_list.append(compute_series(cfg))
+            labels.append(cfg['label'].get())
+        except Exception as e:
+            return messagebox.showerror("Y error", str(e))
+
+    # ── DUPLICATE CHECK ──
+    for existing in saved_plots:
+        # same X?
+        if not existing['x'].equals(x_series):
+            continue
+        # same number of Y series?
+        if len(existing['ys_series']) != len(ys_list):
+            continue
+        # each Y identical?
+        if any(not e_y.equals(y) for e_y, y in zip(existing['ys_series'], ys_list)):
+            continue
+        # same labels, x_label and title?
+        if (existing['labels'] == labels and
+            existing['x_label'] == x_label.get() and
+            existing['title']   == title_entry.get()):
+            return messagebox.showinfo("Duplicate", "That exact plot is already in your gallery.")
+
+    # ── If we get here, it’s new — so save it ──
+    saved_plots.append({
+        'x':         x_series,
+        'ys_series': ys_list,
+        'labels':    labels,
+        'x_label':   x_label.get(),
+        'title':     title_entry.get()
+    })
+
+    messagebox.showinfo("Saved", f"Plot #{len(saved_plots)} added to gallery.")
+
 def plot():
     global fig, canvas_plot      # must be first!
 
@@ -707,6 +753,127 @@ def save_plot():
         fig.savefig(path)
         messagebox.showinfo("Saved", path)
 
+def publish_gallery():
+    if not saved_plots:
+        return messagebox.showwarning("Empty Gallery", "Nothing has been added yet.")
+    path = filedialog.asksaveasfilename(defaultextension=".png",
+                                        filetypes=[("PNG files","*.png")])
+    if not path:
+        return
+
+    n, cols = len(saved_plots), 2
+    rows = math.ceil(n/cols)
+    fig = plt.Figure(figsize=(cols*6, rows*4), dpi=200, tight_layout=True)
+    axes = fig.subplots(nrows=rows, ncols=cols, squeeze=False)
+    pal = sns.color_palette("deep", n_colors=2)
+
+    for idx, cfg in enumerate(saved_plots):
+        r, c = divmod(idx, cols)
+        ax = axes[r][c]
+        x  = cfg['x']
+        ys = cfg['ys_series']
+        ls = cfg['labels']
+
+        if len(ys) == 1:
+            # Single series: no markers, thin line
+            ax.plot(x, ys[0],
+                    label=ls[0],
+                    color=pal[0],
+                    linewidth=1.0,    # thinner line
+                    alpha=0.9)        # slight opacity for detail
+            ax.set_ylabel(ls[0], color=pal[0])
+            ax.legend(fontsize='x-small', loc='upper right', frameon=False)
+
+        elif len(ys) == 2:
+            # First series on left axis
+            ax.plot(x, ys[0],
+                    label=ls[0],
+                    color=pal[0],
+                    linewidth=1.0,
+                    alpha=0.9)
+            ax.set_ylabel(ls[0], color=pal[0])
+            # Second series on right axis
+            ax2 = ax.twinx()
+            ax2.plot(x, ys[1],
+                     label=ls[1],
+                     color=pal[1],
+                     linewidth=1.0,
+                     alpha=0.9)
+            ax2.set_ylabel(ls[1], color=pal[1])
+            # combined legend
+            h1, l1 = ax.get_legend_handles_labels()
+            h2, l2 = ax2.get_legend_handles_labels()
+            ax.legend(h1+h2, l1+l2,
+                      fontsize='x-small',
+                      loc='upper right',
+                      frameon=False)
+
+        else:
+            # fallback: plot all on one axis
+            for i, (y, lbl) in enumerate(zip(ys, ls)):
+                ax.plot(x, y,
+                        label=lbl,
+                        linewidth=1.0,
+                        alpha=0.9)
+            ax.legend(fontsize='x-small', loc='upper right', frameon=False)
+
+        ax.set_title(cfg['title'], fontsize=10)
+        ax.set_xlabel(cfg['x_label'], fontsize=9)
+        ax.grid(alpha=0.3)
+
+    # remove any empty subplots
+    for idx in range(n, rows*cols):
+        r, c = divmod(idx, cols)
+        fig.delaxes(axes[r][c])
+
+    fig.savefig(path)
+    messagebox.showinfo("Gallery Saved", f"Saved to:\n{path}")
+    
+
+def edit_gallery():
+    if not saved_plots:
+        return messagebox.showinfo("Gallery Empty", "No saved plots to edit.")
+
+    # New pop-up
+    win = tk.Toplevel(root)
+    win.title("Edit Gallery")
+    win.geometry("400x300")
+
+    # Listbox showing saved plot titles
+    lb = tk.Listbox(win, font=("Arial", 10), activestyle='none')
+    lb.pack(side='left', fill='both', expand=True, padx=(10,0), pady=10)
+
+    # Populate it
+    def refresh_list():
+        lb.delete(0, tk.END)
+        for i, cfg in enumerate(saved_plots):
+            lb.insert(tk.END, f"{i+1}. {cfg['title']}")
+
+    refresh_list()
+
+    # Scrollbar for the listbox
+    sb = ttk.Scrollbar(win, orient='vertical', command=lb.yview)
+    lb.configure(yscrollcommand=sb.set)
+    sb.pack(side='left', fill='y', pady=10)
+
+    # Right-hand frame for buttons
+    btns = ttk.Frame(win)
+    btns.pack(side='right', fill='y', padx=10, pady=10)
+
+    def delete_selected():
+        sel = lb.curselection()
+        if not sel:
+            return messagebox.showwarning("No selection", "Please select a plot to delete.")
+        idx = sel[0]
+        # remove it
+        del saved_plots[idx]
+        refresh_list()
+
+    ttk.Button(btns, text="Delete Selected", command=delete_selected) \
+        .pack(fill='x', pady=(0,5))
+    ttk.Button(btns, text="Close", command=win.destroy) \
+        .pack(fill='x')
+    
 # — UI setup —
 root = tk.Tk()
 root.title("Flexible Multi‑Y‑Axis Plotter")
@@ -800,5 +967,15 @@ title_entry = ttk.Entry(scrollable_frame); title_entry.pack(fill='x', pady=2)
 ttk.Button(scrollable_frame, text="Plot", command=plot).pack(fill='x', pady=10)
 ttk.Button(scrollable_frame, text="Save Plot", command=save_plot).pack(fill='x')
 
+ttk.Button(scrollable_frame, text="Add to Gallery",  command=save_current_plot_config) \
+    .pack(fill='x', pady=5)
+ttk.Button(scrollable_frame, text="Publish Gallery", command=publish_gallery) \
+    .pack(fill='x', pady=5)
+
+ttk.Button(scrollable_frame, text="Edit Gallery", command=edit_gallery) \
+    .pack(fill='x', pady=5)
+
 # Start the app
 root.mainloop()
+
+ 
