@@ -6,6 +6,8 @@ A Python/Tkinter application to create flexible, multi‑Y‑axis plots from Exc
 
 <img width="1470" alt="image" src="https://github.com/user-attachments/assets/4c8fc00b-980b-4b74-9d3b-0651df6d9f10" />
 
+![image](https://github.com/user-attachments/assets/7b0a521c-60b4-4153-80d1-2dab1e6ec2f2)
+
 ## Features
 
 - **Load Data**  
